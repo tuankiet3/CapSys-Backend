@@ -1,0 +1,25 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.13.35825.156 d17.13
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CapSys-Backend", "CapSys-Backend.csproj", "{66FFFC5C-6EBD-442B-9E9F-467285DD37BB}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{66FFFC5C-6EBD-442B-9E9F-467285DD37BB}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{66FFFC5C-6EBD-442B-9E9F-467285DD37BB}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{66FFFC5C-6EBD-442B-9E9F-467285DD37BB}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{66FFFC5C-6EBD-442B-9E9F-467285DD37BB}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {A610F393-A5C2-46E0-8284-137FBFB0F756}
+	EndGlobalSection
+EndGlobal
