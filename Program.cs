@@ -1,5 +1,5 @@
 using System.Text;
-using CapSys_Backend.Data;
+using CapSys_Backend.Models;
 using CapSys_Backend.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;

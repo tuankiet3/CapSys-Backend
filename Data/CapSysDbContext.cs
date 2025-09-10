@@ -1,9 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
-using CapSys_Backend.Models;
 using Microsoft.EntityFrameworkCore;
 
-namespace CapSys_Backend.Data;
+namespace CapSys_Backend.Models;
 
 public partial class CapSysDbContext : DbContext
 {
@@ -20,7 +19,7 @@ public partial class CapSysDbContext : DbContext
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
 #warning To protect potentially sensitive information in your connection string, you should move it out of source code. You can avoid scaffolding the connection string by using the Name= syntax to read it from configuration - see https://go.microsoft.com/fwlink/?linkid=2131148. For more guidance on storing connection strings, see http://go.microsoft.com/fwlink/?LinkId=723263.
-        => optionsBuilder.UseSqlServer("Server=TUANKIET\\MSSQLSERVER01;Database=CapSysDB;Integrated Security=SSPI;TrustServerCertificate=True;Encrypt=False;");
+        => optionsBuilder.UseSqlServer("Server=TUANKIET\\MSSQLSERVER01;Database=CapSysDB;Integrated Security=SSPI;TrustServerCertificate=True;");
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -37,6 +36,7 @@ public partial class CapSysDbContext : DbContext
             entity.Property(e => e.CreatedDate).HasDefaultValueSql("(getdate())");
             entity.Property(e => e.Email).HasMaxLength(100);
             entity.Property(e => e.PasswordHash).HasMaxLength(255);
+            entity.Property(e => e.RefreshTokenExpiryTime).HasColumnType("datetime");
             entity.Property(e => e.Username).HasMaxLength(50);
         });
 

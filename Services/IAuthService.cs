@@ -13,6 +13,7 @@ namespace CapSys_Backend.Services
         Task<bool> LogoutAsync(string token);
         Task<ApiResponse> RegisterAsync(RegisterRequest request);
         Task<ApiResponse> ForgetPasswordAsync(ForgetPasswordRequest request);
+        Task<LoginResponse> RefreshTokenAsync(TokenRequest tokenRequest);
         string GenerateJwtToken(Account account);
         bool ValidatePassword(string password, string hash);
         string HashPassword(string password);

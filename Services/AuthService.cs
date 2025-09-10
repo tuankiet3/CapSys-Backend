@@ -3,9 +3,8 @@ using System.Collections.Generic;
 using System.IdentityModel.Tokens.Jwt;
 using System.Linq;
 using System.Security.Claims;
+using System.Security.Cryptography;
 using System.Text;
-using System.Threading.Tasks;
-using CapSys_Backend.Data;
 using CapSys_Backend.Dtos;
 using CapSys_Backend.Models;
 using Microsoft.EntityFrameworkCore;
@@ -19,7 +18,7 @@ namespace CapSys_Backend.Services
         private readonly IConfiguration _configuration;
         private readonly ILogger<AuthService> _logger;
         private readonly IEmailService _emailService;
-        private readonly HashSet<string> _blacklistedTokens = new();
+
 
         public AuthService(CapSysDbContext context, IConfiguration configuration, ILogger<AuthService> logger, IEmailService emailService)
         {
@@ -70,7 +69,7 @@ namespace CapSys_Backend.Services
         public string GenerateJwtToken(Account account)
         {
             var tokenHandler = new JwtSecurityTokenHandler();
-            var key = Encoding.ASCII.GetBytes(_configuration["JWT:Secret"] ?? "your-super-secret-key-that-is-at-least-32-characters-long");
+            var key = Encoding.ASCII.GetBytes(_configuration["JWT:Secret"] ?? "da091c4037f94df53b94876314a5487e");
 
             var tokenDescriptor = new SecurityTokenDescriptor
             {
@@ -83,7 +82,7 @@ namespace CapSys_Backend.Services
                     new Claim(ClaimTypes.Name, account.Username),
                     new Claim(ClaimTypes.NameIdentifier, account.AccountId.ToString())
                 }),
-                Expires = DateTime.UtcNow.AddHours(1),
+                Expires = DateTime.UtcNow.AddMinutes(5),
                 SigningCredentials = new SigningCredentials(new SymmetricSecurityKey(key), SecurityAlgorithms.HmacSha256Signature),
                 Issuer = _configuration["JWT:Issuer"],
                 Audience = _configuration["JWT:Audience"]
@@ -149,13 +148,17 @@ namespace CapSys_Backend.Services
                     };
                 }
 
+                var refreshToken = GenerateRefreshToken();
+
                 var account = new Account
                 {
                     Username = request.Username,
                     Email = request.Email,
                     PasswordHash = HashPassword(request.Password),
                     AccountType = request.AccountType,
-                    CreatedDate = DateTime.Now
+                    CreatedDate = DateTime.Now,
+                    RefreshToken = refreshToken,
+                    RefreshTokenExpiryTime = DateTime.Now.AddDays(_configuration.GetValue<int>("JWT:RefreshTokenValidityInDays"))
                 };
 
                 _context.Accounts.Add(account);
@@ -201,11 +204,21 @@ namespace CapSys_Backend.Services
                 }
                 else
                 {
+                    var token = GenerateJwtToken(account);
+                    var refreshToken = GenerateRefreshToken();
+
+                    account.RefreshToken = refreshToken;
+                    account.RefreshTokenExpiryTime = DateTime.Now.AddDays(_configuration.GetValue<int>("JWT:RefreshTokenValidityInDays"));
+
+                    // Lưu refresh token vào database
+                    await _context.SaveChangesAsync();
+
                     return new LoginResponse
                     {
                         Success = true,
                         Message = "Login successful.",
-                        Token = GenerateJwtToken(account),
+                        Token = token,
+                        RefreshToken = refreshToken,
                         Account = new AccountInfo
                         {
                             AccountID = account.AccountId,
@@ -227,18 +240,50 @@ namespace CapSys_Backend.Services
             }
         }
 
-        public Task<bool> LogoutAsync(string token)
+        private string GenerateRefreshToken()
         {
-            try
+            var randomNumber = new byte[32];
+            using var rng = RandomNumberGenerator.Create();
+            rng.GetBytes(randomNumber);
+            return Convert.ToBase64String(randomNumber);
+        }
+
+        private ClaimsPrincipal GetPrincipalFromExpiredToken(string token)
+        {
+            var key = Encoding.ASCII.GetBytes(_configuration["JWT:Secret"] ?? "da091c4037f94df53b94876314a5487e");
+
+            var tokenValidationParameters = new TokenValidationParameters
             {
-                _blacklistedTokens.Add(token);
-                return Task.FromResult(true);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error during logout for token: {Token}", token);
-                return Task.FromResult(false);
-            }
+                ValidateLifetime = false, // Không validate thời gian hết hạn
+                ValidateIssuerSigningKey = true,
+                IssuerSigningKey = new SymmetricSecurityKey(key),
+                ValidateIssuer = true,
+                ValidIssuer = _configuration["JWT:Issuer"],
+                ValidateAudience = true,
+                ValidAudience = _configuration["JWT:Audience"],
+                ClockSkew = TimeSpan.Zero
+            };
+
+            var tokenHandler = new JwtSecurityTokenHandler();
+            var principal = tokenHandler.ValidateToken(token, tokenValidationParameters, out var securityToken);
+            return principal;
+        }
+
+        public async Task<bool> LogoutAsync(string token)
+        {
+            var principal = GetPrincipalFromExpiredToken(token);
+            var username = principal?.Identity?.Name;
+
+            if (string.IsNullOrEmpty(username))
+                return false;
+
+            var user = await _context.Accounts.SingleOrDefaultAsync(u => u.Username == username);
+            if (user == null) return false;
+
+            user.RefreshToken = null;
+            await _context.SaveChangesAsync();
+
+            return true;
         }
 
         public bool ValidatePassword(string password, string hash)
@@ -250,9 +295,68 @@ namespace CapSys_Backend.Services
             return BCrypt.Net.BCrypt.HashPassword(password);
         }
 
-        public bool IsTokenBlacklisted(string token)
+        public async Task<LoginResponse> RefreshTokenAsync(TokenRequest tokenRequest)
         {
-            return _blacklistedTokens.Contains(token);
+            try
+            {
+                var principal = GetPrincipalFromExpiredToken(tokenRequest.Token);
+                var username = principal?.Identity?.Name;
+
+                _logger.LogInformation("Refresh token request for username: {Username}", username);
+
+                if (string.IsNullOrEmpty(username))
+                {
+                    _logger.LogWarning("Invalid token - no username found");
+                    return new LoginResponse { Success = false, Message = "Invalid token" };
+                }
+
+                var account = await _context.Accounts.SingleOrDefaultAsync(u => u.Username == username);
+
+                if (account == null)
+                {
+                    _logger.LogWarning("Account not found for username: {Username}", username);
+                    return new LoginResponse { Success = false, Message = "Account not found" };
+                }
+
+                if (account.RefreshToken != tokenRequest.RefreshToken)
+                {
+                    _logger.LogWarning("Refresh token mismatch for user: {Username}", username);
+                    return new LoginResponse { Success = false, Message = "Invalid refresh token" };
+                }
+
+                if (account.RefreshTokenExpiryTime <= DateTime.Now)
+                {
+                    _logger.LogWarning("Refresh token expired for user: {Username}. Expiry: {ExpiryTime}, Current: {CurrentTime}",
+                        username, account.RefreshTokenExpiryTime, DateTime.Now);
+                    return new LoginResponse { Success = false, Message = "Refresh token expired" };
+                }
+
+                var newAccessToken = GenerateJwtToken(account);
+                var newRefreshToken = GenerateRefreshToken();
+
+                account.RefreshToken = newRefreshToken;
+                account.RefreshTokenExpiryTime = DateTime.Now.AddDays(_configuration.GetValue<int>("JWT:RefreshTokenValidityInDays"));
+                await _context.SaveChangesAsync();
+
+                _logger.LogInformation("Successfully refreshed token for user: {Username}", username);
+
+                return new LoginResponse
+                {
+                    Token = newAccessToken,
+                    RefreshToken = newRefreshToken,
+                    Success = true,
+                    Message = "Token refreshed successfully"
+                };
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error during token refresh");
+                return new LoginResponse
+                {
+                    Success = false,
+                    Message = "Error during token refresh"
+                };
+            }
         }
     }
 }

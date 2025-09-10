@@ -167,7 +167,23 @@ namespace CapSys_Backend.Controllers
                 });
             }
         }
+        [HttpPost("refresh")]
+        public async Task<IActionResult> Refresh(TokenRequest tokenRequest)
+        {
+            if (tokenRequest is null)
+            {
+                return BadRequest("Invalid client request");
+            }
 
+            var result = await _authService.RefreshTokenAsync(tokenRequest);
+
+            if (result.Success)
+            {
+                return Ok(result);
+            }
+
+            return BadRequest(result);
+        }
         private string GetTokenFromRequest()
         {
             var authHeader = Request.Headers.Authorization.FirstOrDefault();
