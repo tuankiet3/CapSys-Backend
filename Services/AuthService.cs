@@ -5,6 +5,7 @@ using System.Linq;
 using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
+using CapSys_Backend.Data;
 using CapSys_Backend.Dtos;
 using CapSys_Backend.Models;
 using Microsoft.EntityFrameworkCore;

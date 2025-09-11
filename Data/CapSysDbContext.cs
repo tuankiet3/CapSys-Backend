@@ -1,8 +1,9 @@
 ﻿using System;
 using System.Collections.Generic;
+using CapSys_Backend.Models;
 using Microsoft.EntityFrameworkCore;
 
-namespace CapSys_Backend.Models;
+namespace CapSys_Backend.Data;
 
 public partial class CapSysDbContext : DbContext
 {
